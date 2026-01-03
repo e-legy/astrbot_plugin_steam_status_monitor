@@ -65,7 +65,8 @@ class AchievementMonitor:
         # 黑名单机制
         if hasattr(self, 'achievement_blacklist') and str(appid) in self.achievement_blacklist:
             return None
-        url = "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/"
+        api_base = getattr(self, 'API_PROXY', 'api.steampowered.com')
+        url = f"https://{api_base.rstrip('/')}/ISteamUserStats/GetPlayerAchievements/v1/"
         lang_list = ["schinese", "english", "en"]
         all_failed = True
         for lang in lang_list:
@@ -122,10 +123,11 @@ class AchievementMonitor:
         if cache_key in self.details_cache:
             return self.details_cache[cache_key]
         lang_list = [lang, "schinese", "english", "en"]
-        url_stats = f"https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appid}"
+        api_base = getattr(self, 'API_PROXY', 'api.steampowered.com')
+        url_stats = f"https://{api_base.rstrip('/')}/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={appid}"
         details = {}
         for try_lang in lang_list:
-            url = f"https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?appid={appid}&key={api_key}&l={try_lang}"
+            url = f"https://{api_base.rstrip('/')}/ISteamUserStats/GetSchemaForGame/v2/?appid={appid}&key={api_key}&l={try_lang}"
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
                     # 成就元数据
@@ -143,7 +145,8 @@ class AchievementMonitor:
                                 "appid": appid,
                                 "l": lang2
                             }
-                            resp2 = await client.get("https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/", params=params)
+                            achievements_url = f"https://{api_base.rstrip('/')}/ISteamUserStats/GetPlayerAchievements/v1/"
+                            resp2 = await client.get(achievements_url, params=params)
                             if resp2.status_code == 200:
                                 try:
                                     data = resp2.json()

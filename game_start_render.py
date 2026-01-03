@@ -187,12 +187,18 @@ def render_gradient_bg(img_w, img_h, color_top, color_bottom):
             base.putpixel((x, y), (r, g, b))
     return base
 
-async def get_playtime_hours(api_key, steamid, appid, retry_times=3):
+async def get_playtime_hours(api_key, steamid, appid, retry_times=3, api_proxy=None):
     """通过 Steam Web API 获取某玩家某游戏的总游玩小时数（异步实现，失败自动重试）"""
     import asyncio
-    url = (
-        f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
-        f"?key={api_key}&steamid={steamid}&include_appinfo=0&appids_filter[0]={appid}"
+    if api_proxy:
+        url = (
+            f"https://{api_proxy.rstrip('/')}/IPlayerService/GetOwnedGames/v1/"
+            f"?key={api_key}&steamid={steamid}&include_appinfo=0&appids_filter[0]={appid}"
+        )
+    else:
+        url = (
+            f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
+            f"?key={api_key}&steamid={steamid}&include_appinfo=0&appids_filter[0]={appid}"
     )
     for attempt in range(retry_times):
         try:
@@ -375,13 +381,13 @@ def render_game_start_image(player_name, avatar_path, game_name, cover_path, pla
 
     return img.convert("RGB")
 
-async def render_game_start(data_dir, steamid, player_name, avatar_url, gameid, game_name, api_key=None, superpower=None, online_count=None, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None):
+async def render_game_start(data_dir, steamid, player_name, avatar_url, gameid, game_name, api_key=None, superpower=None, online_count=None, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_proxy=None):
     print(f"[render_game_start] superpower参数: {superpower}")
     avatar_path = get_avatar_path(data_dir, steamid, avatar_url)
     cover_path = await get_cover_path(data_dir, gameid, game_name, sgdb_api_key=sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid)
     playtime_hours = None
     if api_key:
-        playtime_hours = await get_playtime_hours(api_key, steamid, gameid)
+        playtime_hours = await get_playtime_hours(api_key, steamid, gameid, api_proxy=api_proxy)
     img = render_game_start_image(player_name, avatar_path, game_name, cover_path, playtime_hours, superpower, online_count, font_path=font_path)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

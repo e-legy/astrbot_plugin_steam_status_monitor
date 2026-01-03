@@ -1336,7 +1336,7 @@ class SteamStatusMonitorV2(Star):
                         img_bytes = await render_game_start(
                             self.data_dir, sid, name, avatar_url, current_gameid, zh_game_name,
                             api_key=self.API_KEY, superpower=superpower, sgdb_api_key=self.SGDB_API_KEY,
-                            font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid
+                            font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid, api_proxy=self.API_PROXY
                         )
                         import tempfile
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:

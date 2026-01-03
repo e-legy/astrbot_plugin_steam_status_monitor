@@ -4,8 +4,9 @@ from astrbot.api.message_components import Plain, Image
 
 async def handle_openbox(self, event, steamid: str):
     '''查询并格式化展示指定SteamID的全部API返回信息（中文字段名，头像图片附加，位置ID合并，状态字段直观显示）'''
+    api_base = getattr(self, 'API_PROXY', 'api.steampowered.com')
     url = (
-        "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
+        f"https://{api_base.rstrip('/')}/ISteamUser/GetPlayerSummaries/v2/"
         f"?key={self.API_KEY}&steamids={steamid}"
     )
     field_map = {
