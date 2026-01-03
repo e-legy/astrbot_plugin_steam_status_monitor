@@ -3,5 +3,7 @@
   "steam_ids": [
   ],
   "poll_interval_sec": 60,
-  "retry_times": 3
+  "retry_times": 3,
+  "api_proxy": "",
+  "store_proxy": ""
 }

@@ -309,6 +309,8 @@ class SteamStatusMonitorV2(Star):
         self.detailed_poll_log = self.config.get('detailed_poll_log', True)
         self.config.setdefault('enable_failure_blacklist', False)
         self.enable_failure_blacklist = self.config.get('enable_failure_blacklist', False)
+        self.API_PROXY = self.config.get('api_proxy')
+        self.STORE_PROXY = self.config.get('store_proxy')
         
         # 数据持久化目录
         self.data_dir = str(astrbot.core.star.StarTools.get_data_dir("steam_status_monitor"))
@@ -455,8 +457,9 @@ class SteamStatusMonitorV2(Star):
 
     async def fetch_player_status(self, steam_id, retry=None):
         '''拉取单个玩家的 Steam 状态，失败自动重试多次并指数退避'''
+        api_base = getattr(self, 'API_PROXY', 'api.steampowered.com')
         url = (
-            "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
+            f"https://{api_base.rstrip('/')}/ISteamUser/GetPlayerSummaries/v2/"
             f"?key={self.API_KEY}&steamids={steam_id}"
         )
         delay = 1
@@ -511,8 +514,9 @@ class SteamStatusMonitorV2(Star):
         if gid in self._game_name_cache:
             return self._game_name_cache[gid]
         # 优先查中文名（l=schinese），再查英文名（l=en）
-        url_zh = f"https://store.steampowered.com/api/appdetails?appids={gid}&l=schinese"
-        url_en = f"https://store.steampowered.com/api/appdetails?appids={gid}&l=en"
+        store_base = getattr(self, 'STORE_PROXY', 'store.steampowered.com')
+        url_zh = f"https://{store_base.rstrip('/')}/api/appdetails?appids={gid}&l=schinese"
+        url_en = f"https://{store_base.rstrip('/')}/api/appdetails?appids={gid}&l=en"
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 # 查中文名
@@ -549,8 +553,9 @@ class SteamStatusMonitorV2(Star):
                 return cached
             else:
                 return (cached, cached)
-        url_zh = f"https://store.steampowered.com/api/appdetails?appids={gid}&l=schinese"
-        url_en = f"https://store.steampowered.com/api/appdetails?appids={gid}&l=en"
+        store_base = getattr(self, 'STORE_PROXY', 'store.steampowered.com')
+        url_zh = f"https://{store_base.rstrip('/')}/api/appdetails?appids={gid}&l=schinese"
+        url_en = f"https://{store_base.rstrip('/')}/api/appdetails?appids={gid}&l=en"
         name_zh = name_en = fallback_name or "未知游戏"
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -593,10 +598,11 @@ class SteamStatusMonitorV2(Star):
             return self._game_cover_cache[gid]
         # 多区域尝试
         lang_list = ["schinese", "japanese", "en"]
+        store_base = getattr(self, 'STORE_PROXY', 'store.steampowered.com')
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 for lang in lang_list:
-                    url = f"https://store.steampowered.com/api/appdetails?appids={gid}&l={lang}"
+                    url = f"https://{store_base.rstrip('/')}/api/appdetails?appids={gid}&l={lang}"
                     resp = await client.get(url)
                     if resp.status_code != 200:
                         logger.warning(f"获取游戏封面API失败: HTTP {resp.status_code} (gameid={gid}, lang={lang})")
@@ -1505,7 +1511,8 @@ class SteamStatusMonitorV2(Star):
         '''通过 Steam Web API 获取当前游戏在线人数'''
         if not gameid:
             return None
-        url = f"https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={gameid}"
+        api_base = getattr(self, 'API_PROXY', 'api.steampowered.com')
+        url = f"https://{api_base.rstrip('/')}/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid={gameid}"
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(url)

@@ -32,12 +32,21 @@
     "type": "list",
     "hint": "格式(建议后者): SteamID|群号 或 SteamID|平台:消息类型:会话ID，例如: 76561198888888888|123456789 或 76561198888888888|aiocqhttp:GroupMessage:123456789",
     "default": []
-  }
-  ,
+  },
   "enable_failure_blacklist": {
     "description": "失败加入黑名单开关",
     "type": "bool",
     "hint": "关闭时失败不再自动加入成就黑名单",
     "default": false
+  },
+  "api_proxy": {
+    "description": "Steam API代理地址",
+    "type": "string",
+    "hint": "用于替换api.steampowered.com的自定义代理地址，例如example.com/api.steampowered.com.留空表示不使用代理"
+  },
+  "store_proxy": {
+    "description": "Steam商店代理地址",
+    "type": "string",
+    "hint": "用于替换store.steampowered.com的自定义代理地址，例如example.com/store.steampowered.com.留空表示不使用代理"
   }
 }
