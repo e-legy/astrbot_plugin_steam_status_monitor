@@ -311,6 +311,7 @@ class SteamStatusMonitorV2(Star):
         self.enable_failure_blacklist = self.config.get('enable_failure_blacklist', False)
         self.API_PROXY = self.config.get('api_proxy')
         self.STORE_PROXY = self.config.get('store_proxy')
+        self.STEAMSPY_API_PROXY = self.config.get('steamspy_api_proxy')
         
         # 数据持久化目录
         self.data_dir = str(astrbot.core.star.StarTools.get_data_dir("steam_status_monitor"))
@@ -1023,8 +1024,14 @@ class SteamStatusMonitorV2(Star):
             print(f"[superpower] test_game_start_render superpower={superpower}")
             font_path = self.get_font_path('NotoSansHans-Regular.otf')
             online_count = await self.get_game_online_count(gameid)
+            group_id = self.GROUP_ID or 'default'
+            details = await self.achievement_monitor.get_achievement_details(group_id, gameid, lang="schinese", api_key=self.API_KEY, steamid=steamid)
+            achievements = await self.achievement_monitor.get_player_achievements(self.API_KEY, group_id, steamid, gameid)
+            count = 3
+            count = max(1, min(count, len(achievements)))
+            unlocked = set(random.sample(list(achievements), count))
             img_bytes = await render_game_start(
-                self.data_dir, steamid, player_name, avatar_url, gameid, zh_game_name, api_key=self.API_KEY, superpower=superpower, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid
+                self.data_dir, steamid, player_name, avatar_url, gameid, zh_game_name, api_key=self.API_KEY, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid, api_proxy=self.API_PROXY, details=details, unlocked_set=unlocked
             )
             logger.info(f"[测试开始游戏渲染] render_game_start 返回类型: {type(img_bytes)} 长度: {len(img_bytes) if img_bytes else 'None'}")
             if img_bytes:
@@ -1085,9 +1092,12 @@ class SteamStatusMonitorV2(Star):
                 else:
                     tip_text = "你已经和椅子合为一体，成为传说中的‘椅子精’了喵！"
             font_path = self.get_font_path('NotoSansHans-Regular.otf')
+            api_key = self.API_KEY
+            api_proxy = self.API_PROXY
+            steamspy_proxy = self.STEAMSPY_API_PROXY
             img_bytes = await render_game_end(
                 self.data_dir, steamid, player_name, avatar_url, gameid, zh_game_name,
-                end_time_str, tip_text, duration_h, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, appid=gameid
+                end_time_str, tip_text, duration_h, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, appid=gameid, api_key=api_key, api_proxy=api_proxy, steamspy_proxy=steamspy_proxy
             )
             msg = f"👋 {player_name} 不玩 {zh_game_name} 了\n游玩时间 {duration_h:.1f}小时"
             import tempfile
@@ -1182,9 +1192,12 @@ class SteamStatusMonitorV2(Star):
                     zh_game_name, en_game_name = await self.get_game_names(gameid, info["game_name"])
                     print(f"[get_game_names] zh_game_name={zh_game_name}, en_game_name={en_game_name}")
                     font_path = self.get_font_path('NotoSansHans-Regular.otf')
+                    api_key = self.API_KEY
+                    api_proxy = self.API_PROXY
+                    steamspy_proxy = self.STEAMSPY_API_PROXY
                     img_bytes = await render_game_end(
                         self.data_dir, sid, info["name"], avatar_url, gameid, zh_game_name,
-                        end_time_str, tip_text, duration_h, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, appid=gameid
+                        end_time_str, tip_text, duration_h, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, appid=gameid, api_key=api_key, api_proxy=api_proxy, steamspy_proxy=steamspy_proxy
                     )
                     import tempfile
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
@@ -1333,10 +1346,19 @@ class SteamStatusMonitorV2(Star):
                         online_count = await self.get_game_online_count(current_gameid)
                         # 获取英文名用于 sgdb_game_name
                         zh_game_name, en_game_name = await self.get_game_names(current_gameid, zh_game_name)
+                        # 获取成就详情渲染开始游戏卡片的成就进度条
+                        details = self.achievement_monitor.details_cache.get((group_id, current_gameid))
+                        if not details:
+                            try:
+                                details = await self.achievement_monitor.get_achievement_details(group_id, current_gameid, lang="schinese", api_key=self.API_KEY, steamid=sid)
+                            except Exception as e:
+                                details = None
+                                logger.warning(f"获取成就详情失败: {e}")
+                        unlocked_set = await self.achievement_monitor.get_player_achievements(self.API_KEY, group_id, sid, current_gameid)
                         img_bytes = await render_game_start(
                             self.data_dir, sid, name, avatar_url, current_gameid, zh_game_name,
-                            api_key=self.API_KEY, superpower=superpower, sgdb_api_key=self.SGDB_API_KEY,
-                            font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid, api_proxy=self.API_PROXY
+                            api_key=self.API_KEY, sgdb_api_key=self.SGDB_API_KEY,
+                            font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid, api_proxy=self.API_PROXY, details=details, unlocked_set=unlocked_set
                         )
                         import tempfile
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
@@ -1484,9 +1506,12 @@ class SteamStatusMonitorV2(Star):
                                 zh_game_name, en_game_name = await self.get_game_names(gameid, info["game_name"])
                                 print(f"[get_game_names] zh_game_name={zh_game_name}, en_game_name={en_game_name}")
                                 font_path = self.get_font_path('NotoSansHans-Regular.otf')
+                                api_key = self.API_KEY
+                                api_proxy = self.API_PROXY
+                                steamspy_proxy = self.STEAMSPY_API_PROXY
                                 img_bytes = await render_game_end(
                                     self.data_dir, sid, info["name"], avatar_url, gameid, zh_game_name,
-                                    end_time_str, tip_text, duration_min/60 if duration_min > 0 else 0, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, appid=gameid
+                                    end_time_str, tip_text, duration_min/60 if duration_min > 0 else 0, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, appid=gameid, api_key=api_key, api_proxy=api_proxy, steamspy_proxy=steamspy_proxy
                                 )
                                 import tempfile
                                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:

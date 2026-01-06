@@ -7,9 +7,9 @@ import random
 
 BG_COLOR_TOP = (49, 80, 66)
 BG_COLOR_BOTTOM = (28, 35, 44)
-AVATAR_SIZE = 80
-COVER_W, COVER_H = 80, 120
-IMG_W, IMG_H = 512, 192  # 16:6，画布高度减少三分之一
+AVATAR_SIZE = 312
+COVER_W, COVER_H = 479, 718
+IMG_W, IMG_H = 2048, 768  # 16:6，画布高度减少三分之一
 
 
 def get_avatar_path(data_dir, steamid, url, force_update=False):
@@ -157,6 +157,72 @@ def text_wrap(text, font, max_width):
         lines.append(line)
     return lines
 
+def text_truncate_with_ellipsis(text, font, max_width, ellipsis="..."):
+    """
+    文本超出指定宽度后截断，末尾添加省略号（保证最终宽度≤max_width）
+    :param text: 原始文本（str）
+    :param font: Pillow ImageFont 对象（指定字体和字号）
+    :param max_width: 最大允许宽度（像素）
+    :param ellipsis: 省略号字符（默认"..."，可自定义如"…"）
+    :return: 截断后的文本（str）
+    """
+    # 边界条件1：空文本直接返回空
+    if not text:
+        return ""
+    # 边界条件2：最大宽度≤0，直接返回空（避免无效计算）
+    if max_width <= 0:
+        return ""
+    
+    # 创建临时绘图对象（仅用于测量文本宽度，轻量化）
+    dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    
+    # 第一步：先测量省略号自身的宽度（避免省略号占宽后超限）
+    ellipsis_bbox = dummy_draw.textbbox((0, 0), ellipsis, font=font)
+    ellipsis_width = ellipsis_bbox[2] - ellipsis_bbox[0]
+    
+    # 若省略号宽度已超过最大宽度，直接返回空（极端情况）
+    if ellipsis_width >= max_width:
+        return ""
+    
+    # 第二步：逐字符拼接文本，实时测量宽度（核心逻辑）
+    truncated_text = ""
+    # 剩余可用于正文的宽度 = 最大宽度 - 省略号宽度
+    available_width = max_width - ellipsis_width
+    
+    for char in text:
+        # 预计算：当前拼接文本 + 新字符 的宽度
+        test_text = truncated_text + char
+        test_bbox = dummy_draw.textbbox((0, 0), test_text, font=font)
+        test_width = test_bbox[2] - test_bbox[0]
+        
+        # 若当前文本+新字符 ≤ 可用宽度，继续拼接
+        if test_width <= available_width:
+            truncated_text = test_text
+        # 否则停止拼接，添加省略号并退出循环
+        else:
+            break
+    
+    # 第三步：最终处理（仅当原始文本被截断时才加省略号）
+    # 测量原始文本完整宽度，判断是否需要加省略号
+    original_bbox = dummy_draw.textbbox((0, 0), text, font=font)
+    original_width = original_bbox[2] - original_bbox[0]
+    
+    if original_width > max_width:
+        # 文本超限，返回「截断文本+省略号」
+        return truncated_text + ellipsis
+    else:
+        # 文本未超限，返回原始文本
+        return text
+    
+def calculate_text_width(text, font=None, font_size=20):
+    if font is None:
+        font = ImageFont.load_default(size=font_size)
+    dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+
+    bbox = dummy_draw.textbbox((0, 0), text, font=font)
+    width = bbox[2] - bbox[0]
+    return width
+
 def get_chinese_length(text):
     """估算中文字符长度（1中文=2英文）"""
     length = 0
@@ -193,12 +259,12 @@ async def get_playtime_hours(api_key, steamid, appid, retry_times=3, api_proxy=N
     if api_proxy:
         url = (
             f"https://{api_proxy.rstrip('/')}/IPlayerService/GetOwnedGames/v1/"
-            f"?key={api_key}&steamid={steamid}&include_appinfo=0&appids_filter[0]={appid}"
+            f"?key={api_key}&steamid={steamid}&include_appinfo=0&include_played_free_games=true&appids_filter={appid}"
         )
     else:
         url = (
             f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
-            f"?key={api_key}&steamid={steamid}&include_appinfo=0&appids_filter[0]={appid}"
+            f"?key={api_key}&steamid={steamid}&include_appinfo=0&include_played_free_games=true&appids_filter={appid}"
     )
     for attempt in range(retry_times):
         try:
@@ -211,7 +277,10 @@ async def get_playtime_hours(api_key, steamid, appid, retry_times=3, api_proxy=N
                     for g in games:
                         if str(g.get("appid")) == str(appid):
                             playtime_min = g.get("playtime_forever", 0)
-                            return round(playtime_min / 60, 1)
+                            playtime_2weeks_min = g.get("playtime_2weeks", 0)
+                            playtime_hours = round(playtime_min / 60, 1)
+                            playtime_2weeks_hours = round(playtime_2weeks_min / 60, 1)
+                            return playtime_hours, playtime_2weeks_hours
                     print(f"[get_playtime_hours] 未找到目标游戏: steamid={steamid} appid={appid} games={games}")
                 else:
                     print(f"[get_playtime_hours] HTTP状态码异常: {resp.status_code} url={url}")
@@ -219,7 +288,7 @@ async def get_playtime_hours(api_key, steamid, appid, retry_times=3, api_proxy=N
             print(f"[get_playtime_hours] 获取游玩时间异常: {e} url={url}")
         if attempt < retry_times - 1:
             await asyncio.sleep(1)
-    return 0.0
+    return 0.0, 0.0
 
 def get_font_path(font_name):
     fonts_dir = os.path.join(os.path.dirname(__file__), 'fonts')
@@ -231,29 +300,31 @@ def get_font_path(font_name):
         return font_path2
     return font_name
 
-def render_game_start_image(player_name, avatar_path, game_name, cover_path, playtime_hours=None, superpower=None, online_count=None, font_path=None):
+def render_game_start_image(player_name, avatar_path, game_name, cover_path, playtime_hours=None, online_count=None, font_path=None, playtime_2weeks_hours=None, unlocked_achievements=None, total_achievements=None):
     # 字体
     fonts_dir = os.path.join(os.path.dirname(__file__), 'fonts')
-    font_regular = os.path.join(fonts_dir, 'NotoSansHans-Regular.otf')
-    font_medium = os.path.join(fonts_dir, 'NotoSansHans-Medium.otf')
+    font_regular = os.path.join(fonts_dir, 'HarmonyOS_Sans_SC_Regular.ttf')
+    font_medium = os.path.join(fonts_dir, 'HarmonyOS_Sans_SC_Medium.ttf')
     if not os.path.exists(font_regular):
         font_regular = os.path.join(os.path.dirname(__file__), 'NotoSansHans-Regular.otf')
     if not os.path.exists(font_medium):
         font_medium = os.path.join(os.path.dirname(__file__), 'NotoSansHans-Medium.otf')
     try:
         font_bold = ImageFont.truetype(font_medium, 28)
-        font = ImageFont.truetype(font_regular, 22)
+        font = ImageFont.truetype(font_regular, 20)
         font_small = ImageFont.truetype(font_regular, 16)
     except:
         font_bold = font = font_small = ImageFont.load_default()
 
+    res_dir = os.path.join(os.path.dirname(__file__), 'resources')
+    background_img = os.path.join(res_dir, 'background.png')
     img_w = IMG_W
     img_h = IMG_H
-    img = render_gradient_bg(img_w, img_h, BG_COLOR_TOP, BG_COLOR_BOTTOM).convert("RGBA")
+    img = Image.open(background_img).convert("RGBA")
     draw = ImageDraw.Draw(img)
 
     # 1. 封面图贴左，等比例缩放高度，宽度自适应，左贴右留空，不裁剪
-    cover_area_h = IMG_H
+    cover_area_h = COVER_H
     new_w = COVER_W  # 默认宽度，防止后续变量未定义
     if cover_path and os.path.exists(cover_path):
         try:
@@ -262,133 +333,133 @@ def render_game_start_image(player_name, avatar_path, game_name, cover_path, pla
             new_w = int(cover_src.width * scale)
             new_h = cover_area_h
             cover_resized = cover_src.resize((new_w, new_h), Image.LANCZOS)
-            img.paste(cover_resized, (0, 0), cover_resized)
+            img.paste(cover_resized, (35, 25), cover_resized)
         except Exception as e:
             print(f"[render_game_start_image] 封面渲染失败: {e}")
             new_w = COVER_W  # 渲染失败时使用默认宽度
 
     # 2. 头像位置参数（不再渲染头像）
-    avatar_size = AVATAR_SIZE
-    avatar_margin = 24
-    cover_right = int(new_w)
-    avatar_x = cover_right + avatar_margin
-    # avatar_y 的赋值和渲染放到后面
-
-    # 3. 文本：头像右侧，整体垂直居中，左右留白，无背景
-    text_x = avatar_x + avatar_size + avatar_margin
-    text_area_w = img_w - text_x - avatar_margin
-    game_name_padded = pad_game_name(game_name, min_cn_len=10)
-    game_name_lines = text_wrap(game_name_padded, font, text_area_w)
-    line_height = 36
-    # 只为游戏时长多加一行
-    block_height = line_height * (2 + len(game_name_lines)) + 10 + font_small.size + 4
-    text_y = (img_h - block_height) // 2
-
-    # 将头像Y坐标与玩家名对齐，并下移10像素
-    avatar_y = text_y + 10
-
-    # 头像渲染（只保留一次）
-    if avatar_path and os.path.exists(avatar_path):
-        try:
-            avatar = Image.open(avatar_path).convert("RGBA").resize((AVATAR_SIZE, AVATAR_SIZE))
-            # 圆角遮罩
-            mask = Image.new("L", (AVATAR_SIZE, AVATAR_SIZE), 0)
-            draw_mask = ImageDraw.Draw(mask)
-            draw_mask.rounded_rectangle((0, 0, AVATAR_SIZE, AVATAR_SIZE), radius=AVATAR_SIZE//5, fill=255)
-            avatar_rgba = avatar.copy()
-            avatar_rgba.putalpha(mask)
-            img.alpha_composite(avatar_rgba, (avatar_x, avatar_y))
-            # 超能力文本渲染（头像下方居中两行）
-            if superpower:
-                try:
-                    font_power_title = ImageFont.truetype(font_regular, 16)
-                    font_power = ImageFont.truetype(font_regular, 18)
-                except:
-                    font_power_title = font_power = ImageFont.load_default()
-                power_x = avatar_x + AVATAR_SIZE // 2
-                power_y = avatar_y + AVATAR_SIZE + 8
-                title_text = "今天的超能力"
-                ability_text = superpower
-                title_bbox = draw.textbbox((0, 0), title_text, font=font_power_title)
-                title_w = title_bbox[2] - title_bbox[0]
-                title_h = title_bbox[3] - title_bbox[1]
-                ability_bbox = draw.textbbox((0, 0), ability_text, font=font_power)
-                ability_w = ability_bbox[2] - ability_bbox[0]
-                ability_h = ability_bbox[3] - ability_bbox[1]
-                title_color = (255, 255, 255, 128)
-                ability_color = (120, 180, 255, 128)
-                draw.text(
-                    (avatar_x + (AVATAR_SIZE - title_w) // 2, power_y),
-                    title_text, font=font_power_title, fill=title_color
-                )
-                draw.text(
-                    (avatar_x + (AVATAR_SIZE - ability_w) // 2, power_y + title_h + 2),
-                    ability_text, font=font_power, fill=ability_color
-                )
-        except Exception as e:
-            print(f"[render_game_start_image] 头像/超能力渲染失败: {e}")
+    avatar_size = AVATAR_SIZE  # 正方形头像边长
+    avatar_margin = 86  # 头像与右侧文本的距离
+    cover_margin = 131  # 封面与头像的距离
+    cover_right = int(new_w)  # 封面右侧边界的Y坐标
+    status_width = 17  # 在线状态条宽度
+    avatar_x = cover_right + cover_margin  # 头像的X坐标
+    avatar_y = 117
 
     # 新增：右上角显示在线人数，提前计算宽度
     online_text = None
     online_text_w = 0
     if online_count is not None:
-        try:
-            font_online = ImageFont.truetype(font_regular, 14)
-        except:
-            font_online = ImageFont.load_default()
-        online_text = f"\u25CF玩家人数{online_count}"
-        text_bbox = draw.textbbox((0, 0), online_text, font=font_online)
-        online_text_w = text_bbox[2] - text_bbox[0] + 10  # 加右侧边距
+        online_text = f"\u25CF{online_count}"
+        online_text_w = calculate_text_width(online_text, font=ImageFont.truetype(font_regular, 55))  # 使用游戏时间字体
 
-    # 玩家名自适应字号，防止出界和与在线人数重叠
-    max_playername_w = IMG_W - (text_x + 8) - online_text_w - 24
-    player_font_size = 28
-    for size in range(28, 15, -2):
+    # 3. 文本：头像右侧，整体垂直居中，左右留白，无背景
+    text_x = avatar_x + avatar_size + status_width + avatar_margin
+    text_y = avatar_y
+    text_area_w = img_w - text_x - avatar_margin - online_text_w - 60
+    line_height = 115  # 单行文本高度
+
+    # 头像渲染（只保留一次）
+    if avatar_path and os.path.exists(avatar_path):
         try:
-            font_bold_tmp = ImageFont.truetype(font_medium, size)
-        except:
-            font_bold_tmp = ImageFont.load_default()
-        bbox = draw.textbbox((0, 0), player_name, font_bold_tmp)
-        if bbox[2] - bbox[0] <= max_playername_w:
-            player_font_size = size
-            break
-    try:
-        font_bold_final = ImageFont.truetype(font_medium, player_font_size)
-    except:
-        font_bold_final = ImageFont.load_default()
-    draw.text((text_x + 8, text_y), player_name, font=font_bold_final, fill=(255,255,255,255))
+            avatar = Image.open(avatar_path).convert("RGBA").resize((avatar_size, avatar_size))
+            # 状态条
+            status_bar = Image.new("RGBA", (status_width, avatar_size), (38, 157, 96, 255))
+            avatar_img = Image.new("RGBA", (avatar_size + status_width, avatar_size), (0, 0, 0, 0))
+            avatar_img.alpha_composite(avatar, (0, 0))
+            avatar_img.alpha_composite(status_bar, (avatar_size, 0))
+            img.alpha_composite(avatar_img, (avatar_x, avatar_y))
+        except Exception as e:
+            print(f"[render_game_start_image] 头像渲染失败: {e}")
+
+    # 玩家名自适应省略，防止出界和与在线人数重叠
+    font_regular_player = ImageFont.truetype(font_regular, 70)
+    player_name_text = text_truncate_with_ellipsis(player_name, font_regular_player, text_area_w)
+    draw.text((text_x, text_y), player_name_text, font=font_regular_player, fill=(190,214,165,255))
 
     # “正在玩”
-    draw.text((text_x + 8, text_y + line_height), "正在玩", font=font, fill=(200,255,200,255))
-    # 游戏名多行（亮绿色 129,173,81）
-    for idx, line in enumerate(game_name_lines):
-        draw.text((text_x + 8, text_y + line_height*2 + idx*line_height), line, font=font, fill=(129,173,81,255))
-    # 游戏时长（紧跟在最后一行游戏名下方，无多余空行）
-    if playtime_hours is not None:
-        playtime_str = f"游戏时间 {playtime_hours} 小时"
-        y_time = text_y + line_height*2 + len(game_name_lines)*line_height + 4  # 仅加4像素间距
+    draw.text((text_x, text_y + line_height), "正在玩", font=font_regular_player, fill=(132,133,134,255))
+    # 游戏名自适应省略
+    font_medium_player = ImageFont.truetype(font_medium, 70)
+    game_name_text = text_truncate_with_ellipsis(game_name, font_medium_player, img_w - text_x - avatar_margin)
+    draw.text((text_x, text_y + 2 * line_height), game_name_text, font=font_medium_player, fill=(129,173,81,255))
+    # 游戏时长
+    playtime_2weeks_x = avatar_x
+    playtime_y = img_h - 220
+    playtime_margin = 60
+    playtime_font = ImageFont.truetype(font_regular, 55)
+    draw.text((playtime_2weeks_x, playtime_y), "过去两周", font=playtime_font, fill=(184,188,177,255))
+    playtime_forever_x = playtime_2weeks_x + calculate_text_width("过去两周", font=playtime_font) + playtime_margin
+    draw.text((playtime_forever_x, playtime_y), "总游戏时间", font=playtime_font, fill=(184,188,177,255))
+    if playtime_2weeks_hours is not None:
+        playtime_2weeks_str = f"{playtime_2weeks_hours} 小时"
+        y_time = playtime_y + line_height
         draw.text(
-            (text_x + 8, y_time),
-            playtime_str, font=font_small, fill=(120,180,255,255)
+            (playtime_2weeks_x, y_time),
+            playtime_2weeks_str, font=playtime_font, fill=(151,156,136,255)
         )
-        print(f"[render_game_start_image] 渲染游戏时长: {playtime_str}")
+        print(f"[render_game_start_image] 渲染近两周游戏时长: {playtime_2weeks_str}")
+    else:
+        print("[render_game_start_image] 未获取到近两周游戏时长，playtime_2weeks_hours=None")
+    if playtime_hours is not None:
+        playtime_str = f"{playtime_hours} 小时"
+        y_time = playtime_y + line_height
+        draw.text(
+            (playtime_forever_x, y_time),
+            playtime_str, font=playtime_font, fill=(151,156,136,255)
+        )
+        print(f"[render_game_start_image] 渲染总游戏时长: {playtime_str}")
     else:
         print("[render_game_start_image] 未获取到游戏时长，playtime_hours=None")
 
+    # 时间
+    from datetime import datetime
+    now = datetime.now()
+    time_str = now.strftime("%Y-%m-%d %H:%M")
+    draw.text((img_w - calculate_text_width(time_str, font=playtime_font) - playtime_margin, 30), time_str, font=playtime_font, fill=(255,255,255,255))
+
+
     # 在线人数渲染（放在最后，确保不会被玩家名遮挡）
     if online_text:
-        draw.text((IMG_W - online_text_w, 10), online_text, font=font_online, fill=(120,180,255,180))
+        draw.text((img_w - online_text_w - playtime_margin, avatar_y), online_text, font=playtime_font, fill=(120,180,255,180))
+
+    # 成就进度条
+    achievement_x = playtime_forever_x + calculate_text_width("总游戏时间", font=playtime_font) + playtime_margin
+    draw.text((achievement_x, playtime_y), "成就", font=playtime_font, fill=(184,188,177,255))
+    progress_percent = int(unlocked_achievements / total_achievements * 100) if total_achievements else 0
+    bar_x = achievement_x
+    bar_y = playtime_y + line_height + 3
+    dummy_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    test_bbox = dummy_draw.textbbox((0, 0), "测试文本", font=playtime_font)
+    bar_h = test_bbox[3] - test_bbox[1]
+    bar_w = img_w - bar_x - playtime_margin
+    bar_radius = bar_h // 2
+    # 底色
+    draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), radius=bar_radius, fill=(60, 62, 70, 180))
+    # 高亮色
+    progress_fill = (26, 159, 255, 255)
+    fill_w = int(bar_w * progress_percent / 100)
+    if fill_w > 0:
+        draw.rounded_rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), radius=bar_radius, fill=progress_fill)
+    # 文本
+    progress_text = f"{unlocked_achievements}/{total_achievements} ({progress_percent}%)"
+    progress_text_bbox = draw.textbbox((0, 0), progress_text, font=playtime_font)
+    progress_text_w = progress_text_bbox[2] - progress_text_bbox[0]
+    draw.text((achievement_x + bar_w - progress_text_w, playtime_y), progress_text, fill=(142, 207, 255), font=playtime_font)
 
     return img.convert("RGB")
 
-async def render_game_start(data_dir, steamid, player_name, avatar_url, gameid, game_name, api_key=None, superpower=None, online_count=None, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_proxy=None):
-    print(f"[render_game_start] superpower参数: {superpower}")
+async def render_game_start(data_dir, steamid, player_name, avatar_url, gameid, game_name, details: dict, api_key=None, online_count=None, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_proxy=None, unlocked_set: set = None):
     avatar_path = get_avatar_path(data_dir, steamid, avatar_url)
     cover_path = await get_cover_path(data_dir, gameid, game_name, sgdb_api_key=sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid)
     playtime_hours = None
+    playtime_2weeks_hours = None
+    unlocked_achievements = len(unlocked_set)
+    total_achievements = len(details)
     if api_key:
-        playtime_hours = await get_playtime_hours(api_key, steamid, gameid, api_proxy=api_proxy)
-    img = render_game_start_image(player_name, avatar_path, game_name, cover_path, playtime_hours, superpower, online_count, font_path=font_path)
+        playtime_hours, playtime_2weeks_hours = await get_playtime_hours(api_key, steamid, gameid, api_proxy=api_proxy)
+    img = render_game_start_image(player_name, avatar_path, game_name, cover_path, playtime_hours, online_count, font_path=font_path, playtime_2weeks_hours=playtime_2weeks_hours, unlocked_achievements=unlocked_achievements, total_achievements=total_achievements)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)

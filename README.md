@@ -1,7 +1,7 @@
 # Steam 状态监控插件V2
 
 ## 访问统计
-![:shell](https://count.getloli.com/@github_monitor_shell?name=github_monitor_shell&theme=minecraft&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
+![:elegy](https://count.getloli.com/@steam_monitor_elegy?name=steam_monitor_elegy&theme=minecraft&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
 
 本插件是专为AstrBot设计的插件，用于定时轮询 Steam Web API，监控指定玩家的在线/离线/游戏状态变更，并在状态变化时推送通知。支持多 SteamID 监控，自动记录游玩日志，支持群聊分组，数据持久化，支持丰富指令。
 
@@ -42,8 +42,8 @@
 - 如果出现未知的无法提醒，但轮询显示正常的情况，请使用 /steam on/off 进行修复
 - 部分设备会出现2.1.7或以上版本无法正常进行信息推送的情况，需降级为2.1.6或以下版本使用。
 ## 演示截图
-![开始游戏示例](https://raw.githubusercontent.com/Maoer233/astrbot_plugin_steam_status_monitor/main/str.png)
-![结束游戏示例](https://raw.githubusercontent.com/Maoer233/astrbot_plugin_steam_status_monitor/main/stop.png)
+![开始游戏示例](https://raw.githubusercontent.com/e-legy/astrbot_plugin_steam_status_monitor_elegy/main/start.jpg)
+![结束游戏示例](https://raw.githubusercontent.com/e-legy/astrbot_plugin_steam_status_monitor_elegy/main/stop.jpg)
 ![成就推送示例](https://raw.githubusercontent.com/Maoer233/astrbot_plugin_steam_status_monitor/main/achievement.png)
 
 
@@ -76,21 +76,6 @@
 如果显示缺少依赖，你可以尝试下载以下工具来进行修复
 pip install httpx pillow
 
-可以添加QQ：1912584909 来反馈功能和建议 闲聊也欢迎喵~
-
 ## ⭐ Stars
 
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我维护这个开源项目的动力 ❤️。
-
-## 更新日志
-
-### v2.1.9
-- 新增 `steam_group_mapping` 配置项，支持通过配置文件预设 SteamID 与群号的映射关系
-- 修复配置项与命令数据不互通的问题
-
-
-## 🐔 联系作者
-
-- **反馈**：欢迎在 [GitHub Issues](https://github.com/1592363624/astrbot_plugin_zanwo_shell/issues) 提交问题或建议
-QQ群:91219736
-telegram:[巅峰阁](https://t.me/ShellDFG)

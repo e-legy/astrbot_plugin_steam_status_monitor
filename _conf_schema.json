@@ -48,5 +48,10 @@
     "description": "Steam商店代理地址",
     "type": "string",
     "hint": "用于替换store.steampowered.com的自定义代理地址，例如example.com/store.steampowered.com.留空表示不使用代理"
+  },
+  "steamspy_api_proxy": {
+    "description": "SteamSpy API代理地址",
+    "type": "string",
+    "hint": "用于替换steamspy.com的自定义代理地址，例如example.com/steamspy.com.留空表示不使用代理"
   }
 }
