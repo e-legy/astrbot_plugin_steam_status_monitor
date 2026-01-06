@@ -20,6 +20,49 @@ STAR_BG_PATH = os.path.join(os.path.dirname(__file__), "随机散布的小星星
 
 SGDB_API_KEY = "00c703ea9a664ce236526aca0faeaaf4"
 
+def get_steam_library_cover_url(appid, api_proxy=None) -> str | None:
+    if api_proxy:
+        api_url = f"https://{api_proxy.rstrip('/')}/IStoreBrowseService/GetItems/v1/"
+    else:
+        api_url = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/"
+    
+    # 构建多行参数字典
+    input_json = {
+        "ids": [{"appid": appid}],
+        "context": {
+            "language": "schinese",
+            "country_code": "CN"
+        },
+        "data_request": {
+            "include_assets": True
+        }
+    }
+
+    params = {
+        "input_json": json.dumps(input_json)
+    }
+
+    try:
+        resp = requests.get(api_url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+
+        item = data.get("response", {}).get("store_items", [{}])[0]
+        assets = item.get("assets", {})
+        
+        # 拼接 URL
+        format_template = assets.get("asset_url_format")
+        filename = assets.get("library_capsule_2x") or assets.get("library_capsule")
+        
+        if format_template and filename:
+            cdn_prefix = "https://shared.steamstatic.com/store_item_assets/"
+            return cdn_prefix + format_template.replace("${FILENAME}", filename)
+        print("[Steam官方封面] 未找到Steam图片资产")
+        return None
+    except Exception as e:
+        print(f"[Steam官方封面] 发生错误: {e}")
+        return None
+
 async def get_sgdb_vertical_cover(game_name, sgdb_api_key=None, sgdb_game_name=None, appid=None):
     import httpx
     if not sgdb_api_key:
@@ -166,7 +209,7 @@ def render_gradient_bg(img_w, img_h, color_top, color_bottom):
     return base
 
 # get_cover_path 改为 async def 并 await get_sgdb_vertical_cover
-async def get_cover_path(data_dir, gameid, game_name, force_update=False, sgdb_api_key=None, sgdb_game_name=None, appid=None):
+async def get_cover_path(data_dir, gameid, game_name, force_update=False, sgdb_api_key=None, sgdb_game_name=None, appid=None, api_proxy=None):
     from PIL import Image as PILImage
     import httpx
     cover_dir = os.path.join(data_dir, "covers_v")
@@ -175,17 +218,31 @@ async def get_cover_path(data_dir, gameid, game_name, force_update=False, sgdb_a
     # 只在本地不存在时才云端获取
     if os.path.exists(path):
         return path
-    # 只尝试 SGDB 竖版封面
+    
+    # 尝试 Steam 官方竖版封面和 SGDB 竖版封面
+    steam_url = get_steam_library_cover_url(appid, api_proxy=api_proxy)
+    if steam_url:
+        try:
+            with httpx.stream("GET", steam_url, follow_redirects=True) as response:
+                response.raise_for_status() # 确保请求成功
+                with open(path, "wb") as f:
+                    for chunk in response.iter_bytes(): # 逐块写入
+                        f.write(chunk)
+                return path
+        except Exception as e:
+            print(f"[get_cover_path] Steam官方封面下载异常: {e} url={steam_url}")
     url = await get_sgdb_vertical_cover(game_name, sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid)
     if url:
         try:
-            resp = httpx.get(url, timeout=10)
-            if resp.status_code == 200:
+            with httpx.stream("GET", url, follow_redirects=True) as response:
+                response.raise_for_status() # 确保请求成功
                 with open(path, "wb") as f:
-                    f.write(resp.content)
+                    for chunk in response.iter_bytes(): # 逐块写入
+                        f.write(chunk)
                 return path
         except Exception as e:
             print(f"[get_cover_path] SGDB下载异常: {e} url={url}")
+    
     print(f"[get_cover_path] SGDB未收录或下载失败: {gameid} {game_name}")
     return None
 
@@ -363,7 +420,6 @@ async def get_playtime_hours(api_key, steamid, appid, retry_times=3, api_proxy=N
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     data = resp.json()
-                    print(f"[get_playtime_hours] API返回: {data}")
                     games = data.get("response", {}).get("games", [])
                     for g in games:
                         if str(g.get("appid")) == str(appid):
@@ -413,7 +469,7 @@ def render_game_end_image(player_name, avatar_path, game_name, cover_path, end_t
             scale = cover_area_h / cover_src.height
             new_w = int(cover_src.width * scale)
             new_h = cover_area_h
-            cover_resized = cover_src.resize((new_w, new_h), Image.LANCZOS)
+            cover_resized = cover_src.resize((new_w, new_h), resample=1)
             img.paste(cover_resized, (35, 25), cover_resized)
         except Exception as e:
             print(f"[render_game_start_image] 封面渲染失败: {e}")
@@ -465,7 +521,7 @@ def render_game_end_image(player_name, avatar_path, game_name, cover_path, end_t
     playtime_font = ImageFont.truetype(font_regular, 55)
     draw.text((playtime_forever_x, playtime_y), "已游玩", font=playtime_font, fill=(184,188,177,255))
     if duration_h is not None:
-        playtime_str = f"{duration_h} 小时"
+        playtime_str = f"{duration_h:.1f} 小时"
         draw.text((playtime_forever_x, playtime_y + line_height), playtime_str, font=playtime_font, fill=(151,156,136,255))
         print(f"[render_game_start_image] 渲染总游戏时长: {playtime_str}")
     else:
@@ -511,7 +567,7 @@ def render_game_end_image(player_name, avatar_path, game_name, cover_path, end_t
 # render_game_end 里 await get_cover_path
 async def render_game_end(data_dir, steamid, player_name, avatar_url, gameid, game_name, end_time_str, tip_text, duration_h, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_key=None, api_proxy=None, steamspy_proxy=None):
     avatar_path = get_avatar_path(data_dir, steamid, avatar_url)
-    cover_path = await get_cover_path(data_dir, gameid, game_name, sgdb_api_key=sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid)
+    cover_path = await get_cover_path(data_dir, gameid, game_name, sgdb_api_key=sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid, api_proxy=api_proxy)
     playtime_hours = None
     average_time = get_steamspy_average_forever(gameid, steamspy_proxy=steamspy_proxy)
     print(f"api_key={api_key}, api_proxy={api_proxy}, steamid={steamid}, gameid={gameid}")
