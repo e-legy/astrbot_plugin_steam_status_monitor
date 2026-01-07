@@ -501,14 +501,17 @@ def render_game_start_image(player_name, avatar_path, game_name, cover_path, pla
     if fill_w > 0:
         draw.rounded_rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), radius=bar_radius, fill=progress_fill)
     # 文本
-    progress_text = f"{unlocked_achievements}/{total_achievements} ({progress_percent}%)"
+    if total_achievements == 0:
+        progress_text = "无成就"
+    else:
+        progress_text = f"{unlocked_achievements}/{total_achievements} ({progress_percent}%)"
     progress_text_bbox = draw.textbbox((0, 0), progress_text, font=playtime_font)
     progress_text_w = progress_text_bbox[2] - progress_text_bbox[0]
     draw.text((achievement_x + bar_w - progress_text_w, playtime_y), progress_text, fill=(142, 207, 255), font=playtime_font)
 
     return img.convert("RGB")
 
-async def render_game_start(data_dir, steamid, player_name, avatar_url, gameid, game_name, details: dict, api_key=None, online_count=None, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_proxy=None, unlocked_set: set = None):
+async def render_game_start(data_dir, steamid, player_name, avatar_url, gameid, game_name, details: dict, unlocked_set: set,api_key=None, online_count=None, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_proxy=None,):
     avatar_path = get_avatar_path(data_dir, steamid, avatar_url)
     cover_path = await get_cover_path(data_dir, gameid, game_name, sgdb_api_key=sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid, api_proxy=api_proxy)
     playtime_hours = None

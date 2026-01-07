@@ -1026,10 +1026,13 @@ class SteamStatusMonitorV2(Star):
             online_count = await self.get_game_online_count(gameid)
             group_id = self.GROUP_ID or 'default'
             details = await self.achievement_monitor.get_achievement_details(group_id, gameid, lang="schinese", api_key=self.API_KEY, steamid=steamid)
-            achievements = await self.achievement_monitor.get_player_achievements(self.API_KEY, group_id, steamid, gameid)
-            count = 3
-            count = max(1, min(count, len(achievements)))
-            unlocked = set(random.sample(list(achievements), count))
+            achievements = await self.achievement_monitor.get_player_achievements(self.API_KEY, group_id, steamid, gameid) or []
+            if not achievements:
+                unlocked = set()
+            else:
+                count = 3
+                count = max(1, min(count, len(achievements)))
+                unlocked = set(random.sample(list(achievements), count))
             img_bytes = await render_game_start(
                 self.data_dir, steamid, player_name, avatar_url, gameid, zh_game_name, api_key=self.API_KEY, sgdb_api_key=self.SGDB_API_KEY, font_path=font_path, sgdb_game_name=en_game_name, online_count=online_count, appid=gameid, api_proxy=self.API_PROXY, details=details, unlocked_set=unlocked
             )
@@ -1352,9 +1355,9 @@ class SteamStatusMonitorV2(Star):
                             try:
                                 details = await self.achievement_monitor.get_achievement_details(group_id, current_gameid, lang="schinese", api_key=self.API_KEY, steamid=sid)
                             except Exception as e:
-                                details = None
+                                details = dict()
                                 logger.warning(f"获取成就详情失败: {e}")
-                        unlocked_set = await self.achievement_monitor.get_player_achievements(self.API_KEY, group_id, sid, current_gameid)
+                        unlocked_set = await self.achievement_monitor.get_player_achievements(self.API_KEY, group_id, sid, current_gameid) or set()
                         img_bytes = await render_game_start(
                             self.data_dir, sid, name, avatar_url, current_gameid, zh_game_name,
                             api_key=self.API_KEY, sgdb_api_key=self.SGDB_API_KEY,

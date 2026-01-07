@@ -136,7 +136,7 @@ def get_avatar_path(data_dir, steamid, url, force_update=False):
         print(f"[game_end_render] 头像下载异常: {e}\n{traceback.format_exc()}")
     return path if os.path.exists(path) else None
 
-def get_steamspy_average_forever(appid: int, steamspy_proxy: str = None) -> float | None:
+def get_steamspy_average_forever(appid: int, steamspy_proxy: str = "") -> float | None:
     """
     从SteamSpy API获取指定APPID游戏的average_forever值
     
@@ -565,7 +565,7 @@ def render_game_end_image(player_name, avatar_path, game_name, cover_path, end_t
     return img.convert("RGB")
 
 # render_game_end 里 await get_cover_path
-async def render_game_end(data_dir, steamid, player_name, avatar_url, gameid, game_name, end_time_str, tip_text, duration_h, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_key=None, api_proxy=None, steamspy_proxy=None):
+async def render_game_end(data_dir, steamid, player_name, avatar_url, gameid, game_name, end_time_str, tip_text, duration_h, sgdb_api_key=None, font_path=None, sgdb_game_name=None, appid=None, api_key=None, api_proxy=None, steamspy_proxy: str=""):
     avatar_path = get_avatar_path(data_dir, steamid, avatar_url)
     cover_path = await get_cover_path(data_dir, gameid, game_name, sgdb_api_key=sgdb_api_key, sgdb_game_name=sgdb_game_name, appid=appid, api_proxy=api_proxy)
     playtime_hours = None
