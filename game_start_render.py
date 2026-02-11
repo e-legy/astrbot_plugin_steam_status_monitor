@@ -164,9 +164,15 @@ async def get_cover_path(data_dir, gameid, game_name, force_update=False, sgdb_a
     cover_dir = os.path.join(data_dir, "covers_v")
     os.makedirs(cover_dir, exist_ok=True)
     path = os.path.join(cover_dir, f"{gameid}.jpg")
-    # 只在本地不存在时才云端获取
+    
     if os.path.exists(path):
-        return path
+        file_mtime = os.path.getmtime(path)
+        is_older_than_1_day = (time.time() - file_mtime) > 24 * 3600
+        
+        if not is_older_than_1_day and not force_update:
+            return path
+        else:
+            print(f"[get_cover_path] 封面已过期或强制更新，准备重新获取: {gameid} {game_name}")
     
     # 尝试 Steam 官方竖版封面和 SGDB 竖版封面
     steam_url = get_steam_library_cover_url(appid, api_proxy=api_proxy)
@@ -191,8 +197,12 @@ async def get_cover_path(data_dir, gameid, game_name, force_update=False, sgdb_a
                 return path
         except Exception as e:
             print(f"[get_cover_path] SGDB下载异常: {e} url={url}")
+
+    # 兜底：如果下载失败但本地已有封面，继续使用旧封面
+    if os.path.exists(path):
+        return path
     
-    print(f"[get_cover_path] SGDB未收录或下载失败: {gameid} {game_name}")
+    print(f"[get_cover_path] 封面下载失败: {gameid} {game_name}")
     return None
 
 def text_wrap(text, font, max_width):
